@@ -36,6 +36,20 @@ TGVless — это неофициальный форк официального 
 6. Если домена нет, можно использовать IP сервера, а в `SNI` указать нейтральное имя хоста для TLS-проверки, если это требуется твоей схемой.
 7. Перенеси параметры сервера в раздел `VLESS` внутри приложения.
 
+## Дополнительные инструменты
+
+Для быстрого развёртывания VLESS на VPS есть отдельный GUI-конфигуратор:
+
+- исходники: [VLESS Server Configurator](https://github.com/Valerrra/TGVless/tree/configurator/Tools/vless-server-configurator)
+- готовый релиз: [VlessServerConfigurator.zip](https://github.com/Valerrra/TGVless/blob/configurator/releases/vless-server-configurator/VlessServerConfigurator.zip)
+
+Конфигуратор умеет:
+
+- собрать VLESS TCP + TLS или WS + TLS
+- подключиться к VPS по SSH
+- установить и настроить Xray
+- сгенерировать client JSON, `vless://` URI и QR
+
 ## Важно
 
 - Это форк, а не официальный клиент Telegram.
