@@ -106,10 +106,17 @@ android {
         manifest.srcFile '../TMessagesProj/config/release/AndroidManifest.xml'
     }
 
-    flavorDimensions "minApi"
+    flavorDimensions "vlessPreset", "minApi"
 
     productFlavors {
+        withConfigs {
+            dimension "vlessPreset"
+        }
+        emptyConfigs {
+            dimension "vlessPreset"
+        }
         bundleAfat {
+            dimension "minApi"
             ndk {
                 abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
             }
@@ -119,6 +126,7 @@ android {
             buildConfigField "boolean", "BUNDLE", "true"
         }
         bundleAfat_SDK23 {
+            dimension "minApi"
             ndk {
                 abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
             }
@@ -135,6 +143,7 @@ android {
             buildConfigField "boolean", "BUNDLE", "true"
         }
         afat {
+            dimension "minApi"
             ndk {
                 abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
             }
@@ -158,8 +167,9 @@ android {
 
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-            outputFileName = "app.apk"
-            output.versionCodeOverride = defaultConfig.versionCode * 10 + variant.productFlavors.get(0).abiVersionCode
+            outputFileName = "${variant.name}.apk"
+            def minApiFlavor = variant.productFlavors.find { it.dimension == "minApi" }
+            output.versionCodeOverride = defaultConfig.versionCode * 10 + minApiFlavor.abiVersionCode
         }
     }
 

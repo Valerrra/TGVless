@@ -4792,8 +4792,7 @@ public class AndroidUtilities {
             editor.commit();
 
             SharedConfig.currentProxy = SharedConfig.addProxy(info);
-
-            ConnectionsManager.setProxySettings(true, address, p, user, password, secret);
+            SharedConfig.applyProxySettings(true);
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
             if (activity instanceof LaunchActivity) {
                 INavigationLayout layout = ((LaunchActivity) activity).getActionBarLayout();

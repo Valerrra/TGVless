@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">Telegram</string>
-    <string name="AppNameBeta">Telegram Beta</string>
+    <string name="AppName">TGVess</string>
+    <string name="AppNameBeta">TGVess Beta</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
@@ -2672,6 +2672,11 @@
     <string name="UseProxyUsername">Username</string>
     <string name="UseProxySocks5">SOCKS5 Proxy</string>
     <string name="UseProxyTelegram">MTProto Proxy</string>
+    <string name="AddSocks5Proxy">Add SOCKS5 Proxy</string>
+    <string name="AddMtprotoProxy">Add MTProto Proxy</string>
+    <string name="AddVlessProxy">Add VLESS Proxy</string>
+    <string name="ImportVlessJsonFile">Import VLESS JSON File</string>
+    <string name="ImportVlessFromClipboard">Import VLESS from Clipboard</string>
     <string name="UseProxyTelegramError">The proxy you are using is not configured correctly and will be disabled. Please find another one.</string>
     <string name="UseProxySponsor">Proxy sponsor</string>
     <string name="UseProxySponsorInfo">This channel is shown by your proxy server. To remove this channel from your chat list, disable the proxy in Telegram Settings.</string>
@@ -10816,4 +10821,14 @@
     <string name="AIEditorStyleSharedToManyChats_other">Sent AI Style link to **%1$d chats**.</string>
 
     <string name="GuestBotFor"> for </string>
+    <string name="UseProxyVless">VLESS</string>
+    <string name="UseProxyUuid">UUID</string>
+    <string name="UseProxySni">SNI / Server Name</string>
+    <string name="UseProxyWsPath">WebSocket Path</string>
+    <string name="UseProxyTls">Use TLS</string>
+    <string name="UseProxyInsecure">Allow insecure TLS</string>
+    <string name="UseProxyTransport">Transport</string>
+    <string name="UseProxyTransportTcp">TCP</string>
+    <string name="UseProxyTransportWs">WebSocket</string>
+    <string name="UseProxyVlessInfo">Telegram traffic will connect to a local SOCKS bridge, and the bridge will forward it over VLESS.</string>
 </resources>

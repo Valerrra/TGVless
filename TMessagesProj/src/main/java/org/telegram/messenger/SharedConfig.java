@@ -24,11 +24,16 @@ import android.util.Base64;
 import android.webkit.WebView;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.core.content.pm.ShortcutManagerCompat;
 
+import org.json.JSONException;
 import org.json.JSONObject;
+import org.telegram.proxy.vless.VlessProxyConfig;
+import org.telegram.proxy.vless.VlessProxyManager;
 import org.telegram.tgnet.ConnectionsManager;
+import org.telegram.tgnet.RequestTimeDelegate;
 import org.telegram.tgnet.SerializedData;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.AlertDialog;
@@ -55,7 +60,15 @@ public class SharedConfig {
      * V2: Ping and check time serialized
      */
     private final static int PROXY_SCHEMA_V2 = 2;
-    private final static int PROXY_CURRENT_SCHEMA_VERSION = PROXY_SCHEMA_V2;
+    /**
+     * V3: Proxy type and VLESS json serialized
+     */
+    private final static int PROXY_SCHEMA_V3 = 3;
+    /**
+     * V4: Proxy display metadata and flags serialized
+     */
+    private final static int PROXY_SCHEMA_V4 = 4;
+    private final static int PROXY_CURRENT_SCHEMA_VERSION = PROXY_SCHEMA_V4;
 
     public final static int PASSCODE_TYPE_PIN = 0,
             PASSCODE_TYPE_PASSWORD = 1;
@@ -374,12 +387,20 @@ public class SharedConfig {
     }
 
     public static class ProxyInfo {
+        public static final int TYPE_SOCKS5 = 0;
+        public static final int TYPE_MTPROTO = 1;
+        public static final int TYPE_VLESS = 2;
+        public static final int FLAG_LOCKED_BUILTIN = 1;
 
         public String address;
         public int port;
         public String username;
         public String password;
         public String secret;
+        public int type;
+        public String vlessJson;
+        public String displayName;
+        public int flags;
 
         public long proxyCheckPingId;
         public long ping;
@@ -388,11 +409,23 @@ public class SharedConfig {
         public long availableCheckTime;
 
         public ProxyInfo(String address, int port, String username, String password, String secret) {
+            this(address, port, username, password, secret, TextUtils.isEmpty(secret) ? TYPE_SOCKS5 : TYPE_MTPROTO, "");
+        }
+
+        public ProxyInfo(String address, int port, String username, String password, String secret, int type, String vlessJson) {
+            this(address, port, username, password, secret, type, vlessJson, "", 0);
+        }
+
+        public ProxyInfo(String address, int port, String username, String password, String secret, int type, String vlessJson, String displayName, int flags) {
             this.address = address;
             this.port = port;
             this.username = username;
             this.password = password;
             this.secret = secret;
+            this.type = type;
+            this.vlessJson = vlessJson;
+            this.displayName = displayName;
+            this.flags = flags;
             if (this.address == null) {
                 this.address = "";
             }
@@ -405,9 +438,23 @@ public class SharedConfig {
             if (this.secret == null) {
                 this.secret = "";
             }
+            if (this.vlessJson == null) {
+                this.vlessJson = "";
+            }
+            if (this.displayName == null) {
+                this.displayName = "";
+            }
         }
 
         public String getLink() {
+            if (isVless()) {
+                try {
+                    return getVlessConfig().toUriString();
+                } catch (Throwable t) {
+                    FileLog.e(t);
+                    return "";
+                }
+            }
             StringBuilder url = new StringBuilder(!TextUtils.isEmpty(secret) ? "https://t.me/proxy?" : "https://t.me/socks?");
             try {
                 url.append("server=").append(URLEncoder.encode(address, "UTF-8")).append("&").append("port=").append(port);
@@ -423,11 +470,59 @@ public class SharedConfig {
             } catch (UnsupportedEncodingException ignored) {}
             return url.toString();
         }
+
+        public boolean isVless() {
+            return type == TYPE_VLESS;
+        }
+
+        public boolean isMtproto() {
+            return type == TYPE_MTPROTO;
+        }
+
+        public boolean isLockedBuiltin() {
+            return (flags & FLAG_LOCKED_BUILTIN) != 0;
+        }
+
+        public boolean canEdit() {
+            return !isLockedBuiltin();
+        }
+
+        public @NonNull String getListTitle() {
+            if (!TextUtils.isEmpty(displayName)) {
+                return displayName;
+            }
+            return address + ":" + port;
+        }
+
+        public @NonNull String getVlessKey() {
+            return !TextUtils.isEmpty(vlessJson) ? vlessJson : address + ":" + port + ":" + username + ":" + password + ":" + secret;
+        }
+
+        public @NonNull VlessProxyConfig getVlessConfig() throws JSONException {
+            return VlessProxyConfig.fromJson(vlessJson);
+        }
+
+        public static @NonNull ProxyInfo fromVlessConfig(@NonNull VlessProxyConfig config) throws JSONException {
+            return new ProxyInfo(config.server, config.port, "", "", "", TYPE_VLESS, config.toJson().toString());
+        }
+
+        public static @NonNull ProxyInfo fromVlessConfig(@NonNull VlessProxyConfig config, @NonNull String displayName, int flags) throws JSONException {
+            return new ProxyInfo(config.server, config.port, "", "", "", TYPE_VLESS, config.toJson().toString(), displayName, flags);
+        }
     }
 
     public static ArrayList<ProxyInfo> proxyList = new ArrayList<>();
     private static boolean proxyListLoaded;
     public static ProxyInfo currentProxy;
+    private static final String BUILTIN_VLESS_SEED_VERSION = "builtin_vless_seed_v1";
+    private static final String[] BUILTIN_VLESS_DISPLAY_NAMES = new String[] {
+            "Finland TCP",
+            "Finland WebSocket"
+    };
+    private static final String[] BUILTIN_VLESS_JSONS = new String[] {
+            "{\"type\":\"vless\",\"server\":\"fin.dsinkerii.com\",\"port\":9443,\"uuid\":\"5ff8f96a-18f1-4dc8-a692-f31ed5f6b3c1\",\"tls\":true,\"sni\":\"fin.dsinkerii.com\",\"transport\":\"tcp\",\"wsPath\":\"\",\"insecure\":false}",
+            "{\"type\":\"vless\",\"server\":\"fin.dsinkerii.com\",\"port\":9444,\"uuid\":\"5ff8f96a-18f1-4dc8-a692-f31ed5f6b3c1\",\"tls\":true,\"sni\":\"fin.dsinkerii.com\",\"transport\":\"ws\",\"wsPath\":\"/tgxws\",\"insecure\":false}"
+    };
 
     public static void saveConfig() {
         synchronized (sync) {
@@ -1437,6 +1532,8 @@ public class SharedConfig {
         String proxyPassword = preferences.getString("proxy_pass", "");
         String proxySecret = preferences.getString("proxy_secret", "");
         int proxyPort = preferences.getInt("proxy_port", 1080);
+        int proxyType = preferences.getInt("proxy_type", TextUtils.isEmpty(proxySecret) ? ProxyInfo.TYPE_SOCKS5 : ProxyInfo.TYPE_MTPROTO);
+        String proxyVlessJson = preferences.getString("proxy_vless_json", "");
 
         proxyListLoaded = true;
         proxyList.clear();
@@ -1470,6 +1567,35 @@ public class SharedConfig {
                             }
                         }
                     }
+                } else if (version == PROXY_SCHEMA_V3 || version == PROXY_SCHEMA_V4) {
+                    count = data.readInt32(false);
+
+                    for (int i = 0; i < count; i++) {
+                        ProxyInfo info = new ProxyInfo(
+                                data.readString(false),
+                                data.readInt32(false),
+                                data.readString(false),
+                                data.readString(false),
+                                data.readString(false),
+                                data.readInt32(false),
+                                data.readString(false),
+                                version >= PROXY_SCHEMA_V4 ? data.readString(false) : "",
+                                version >= PROXY_SCHEMA_V4 ? data.readInt32(false) : 0);
+
+                        info.ping = data.readInt64(false);
+                        info.availableCheckTime = data.readInt64(false);
+
+                        proxyList.add(0, info);
+                        if (currentProxy == null) {
+                            if (proxyType == ProxyInfo.TYPE_VLESS && info.isVless() && TextUtils.equals(proxyVlessJson, info.vlessJson)) {
+                                currentProxy = info;
+                            } else if (proxyType != ProxyInfo.TYPE_VLESS && !TextUtils.isEmpty(proxyAddress)) {
+                                if (proxyAddress.equals(info.address) && proxyPort == info.port && proxyUsername.equals(info.username) && proxyPassword.equals(info.password)) {
+                                    currentProxy = info;
+                                }
+                            }
+                        }
+                    }
                 } else {
                     FileLog.e("Unknown proxy schema version: " + version);
                 }
@@ -1491,10 +1617,106 @@ public class SharedConfig {
             }
             data.cleanup();
         }
-        if (currentProxy == null && !TextUtils.isEmpty(proxyAddress)) {
-            ProxyInfo info = currentProxy = new ProxyInfo(proxyAddress, proxyPort, proxyUsername, proxyPassword, proxySecret);
-            proxyList.add(0, info);
+        if (currentProxy == null) {
+            if (proxyType == ProxyInfo.TYPE_VLESS && !TextUtils.isEmpty(proxyVlessJson)) {
+                try {
+                    ProxyInfo info = currentProxy = ProxyInfo.fromVlessConfig(VlessProxyConfig.fromJson(proxyVlessJson));
+                    proxyList.add(0, info);
+                } catch (Throwable t) {
+                    FileLog.e(t);
+                }
+            } else if (!TextUtils.isEmpty(proxyAddress)) {
+                ProxyInfo info = currentProxy = new ProxyInfo(proxyAddress, proxyPort, proxyUsername, proxyPassword, proxySecret, proxyType, "");
+                proxyList.add(0, info);
+            }
         }
+        syncBuiltinVlessProxies(preferences);
+    }
+
+    private static void syncBuiltinVlessProxies(SharedPreferences preferences) {
+        if (!BuildConfig.INCLUDE_BUILTIN_VLESS_PROFILES) {
+            removeBuiltinVlessProxiesIfNeeded();
+            return;
+        }
+        ensureBuiltinVlessProxies(preferences);
+    }
+
+    private static void ensureBuiltinVlessProxies(SharedPreferences preferences) {
+        if (preferences.getBoolean(BUILTIN_VLESS_SEED_VERSION, false)) {
+            return;
+        }
+        boolean changed = false;
+        ProxyInfo firstBuiltin = null;
+        for (int builtinIndex = 0; builtinIndex < BUILTIN_VLESS_JSONS.length; builtinIndex++) {
+            String json = BUILTIN_VLESS_JSONS[builtinIndex];
+            try {
+                ProxyInfo info = ProxyInfo.fromVlessConfig(
+                        VlessProxyConfig.fromJson(json),
+                        BUILTIN_VLESS_DISPLAY_NAMES[builtinIndex],
+                        BuildConfig.LOCK_BUILTIN_VLESS_PROFILES ? ProxyInfo.FLAG_LOCKED_BUILTIN : 0
+                );
+                if (firstBuiltin == null) {
+                    firstBuiltin = info;
+                }
+                boolean exists = false;
+                for (int i = 0; i < proxyList.size(); i++) {
+                    if (TextUtils.equals(proxyList.get(i).vlessJson, info.vlessJson)) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    proxyList.add(info);
+                    changed = true;
+                }
+            } catch (Throwable t) {
+                FileLog.e(t);
+            }
+        }
+        SharedPreferences.Editor editor = preferences.edit();
+        if (currentProxy == null && firstBuiltin != null) {
+            currentProxy = firstBuiltin;
+            editor.putInt("proxy_type", ProxyInfo.TYPE_VLESS);
+            editor.putString("proxy_vless_json", firstBuiltin.vlessJson);
+        }
+        editor.putBoolean(BUILTIN_VLESS_SEED_VERSION, true);
+        editor.apply();
+        if (changed) {
+            saveProxyList();
+        }
+    }
+
+    private static void removeBuiltinVlessProxiesIfNeeded() {
+        boolean changed = false;
+        for (int i = proxyList.size() - 1; i >= 0; i--) {
+            ProxyInfo info = proxyList.get(i);
+            if (info != null && info.isLockedBuiltin()) {
+                if (currentProxy == info) {
+                    currentProxy = null;
+                }
+                proxyList.remove(i);
+                changed = true;
+            }
+        }
+        if (!changed) {
+            return;
+        }
+        SharedPreferences.Editor editor = MessagesController.getGlobalMainSettings().edit();
+        if (currentProxy == null) {
+            editor.remove("proxy_ip");
+            editor.remove("proxy_pass");
+            editor.remove("proxy_user");
+            editor.remove("proxy_port");
+            editor.remove("proxy_secret");
+            editor.remove("proxy_type");
+            editor.remove("proxy_vless_json");
+            editor.putBoolean("proxy_enabled", false);
+            editor.putBoolean("proxy_enabled_calls", false);
+        } else {
+            writeCurrentProxyToPreferences(editor, currentProxy);
+        }
+        editor.apply();
+        saveProxyList();
     }
 
     public static void saveProxyList() {
@@ -1522,6 +1744,10 @@ public class SharedConfig {
             serializedData.writeString(info.username != null ? info.username : "");
             serializedData.writeString(info.password != null ? info.password : "");
             serializedData.writeString(info.secret != null ? info.secret : "");
+            serializedData.writeInt32(info.type);
+            serializedData.writeString(info.vlessJson != null ? info.vlessJson : "");
+            serializedData.writeString(info.displayName != null ? info.displayName : "");
+            serializedData.writeInt32(info.flags);
 
             serializedData.writeInt64(info.ping);
             serializedData.writeInt64(info.availableCheckTime);
@@ -1536,13 +1762,145 @@ public class SharedConfig {
         int count = proxyList.size();
         for (int a = 0; a < count; a++) {
             ProxyInfo info = proxyList.get(a);
-            if (proxyInfo.address.equals(info.address) && proxyInfo.port == info.port && proxyInfo.username.equals(info.username) && proxyInfo.password.equals(info.password) && proxyInfo.secret.equals(info.secret)) {
+            if (proxyInfo.type == info.type
+                    && proxyInfo.address.equals(info.address)
+                    && proxyInfo.port == info.port
+                    && proxyInfo.username.equals(info.username)
+                    && proxyInfo.password.equals(info.password)
+                    && proxyInfo.secret.equals(info.secret)
+                    && TextUtils.equals(proxyInfo.vlessJson, info.vlessJson)) {
+                if (!TextUtils.isEmpty(proxyInfo.displayName)) {
+                    info.displayName = proxyInfo.displayName;
+                }
+                if (proxyInfo.flags != 0) {
+                    info.flags = proxyInfo.flags;
+                }
                 return info;
             }
         }
         proxyList.add(0, proxyInfo);
         saveProxyList();
         return proxyInfo;
+    }
+
+    private static ProxyInfo createResolvedProxyForPreferences(ProxyInfo proxyInfo) {
+        if (proxyInfo == null) {
+            return new ProxyInfo("", 1080, "", "", "", ProxyInfo.TYPE_SOCKS5, "");
+        }
+        if (!proxyInfo.isVless()) {
+            return proxyInfo;
+        }
+        VlessProxyManager.ResolvedProxy resolvedProxy = VlessProxyManager.getInstance().resolve(proxyInfo);
+        if (resolvedProxy == null) {
+            return new ProxyInfo("", 1080, "", "", "", ProxyInfo.TYPE_SOCKS5, "");
+        }
+        return new ProxyInfo(resolvedProxy.address, resolvedProxy.port, resolvedProxy.username, resolvedProxy.password, resolvedProxy.secret, ProxyInfo.TYPE_SOCKS5, "");
+    }
+
+    public static void writeCurrentProxyToPreferences(SharedPreferences.Editor editor, ProxyInfo proxyInfo) {
+        if (proxyInfo == null) {
+            editor.putString("proxy_ip", "");
+            editor.putString("proxy_pass", "");
+            editor.putString("proxy_user", "");
+            editor.putInt("proxy_port", 1080);
+            editor.putString("proxy_secret", "");
+            editor.putInt("proxy_type", ProxyInfo.TYPE_SOCKS5);
+            editor.putString("proxy_vless_json", "");
+            return;
+        }
+        editor.putInt("proxy_type", proxyInfo.type);
+        editor.putString("proxy_vless_json", proxyInfo.isVless() ? proxyInfo.vlessJson : "");
+        ProxyInfo resolvedProxy = createResolvedProxyForPreferences(proxyInfo);
+        editor.putString("proxy_ip", resolvedProxy.address);
+        editor.putString("proxy_pass", resolvedProxy.password);
+        editor.putString("proxy_user", resolvedProxy.username);
+        editor.putInt("proxy_port", resolvedProxy.port);
+        editor.putString("proxy_secret", resolvedProxy.secret);
+    }
+
+    public static void prepareProxySettingsForApplicationStart() {
+        loadProxyList();
+        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+        if (!preferences.getBoolean("proxy_enabled", false) || currentProxy == null) {
+            VlessProxyManager.getInstance().stopAll();
+            return;
+        }
+        SharedPreferences.Editor editor = preferences.edit();
+        writeCurrentProxyToPreferences(editor, currentProxy);
+        editor.apply();
+        if (currentProxy.isVless()) {
+            VlessProxyManager.getInstance().stopAllExcept(currentProxy);
+        } else {
+            VlessProxyManager.getInstance().stopAll();
+        }
+    }
+
+    public static void applyProxySettings(boolean enabled) {
+        SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("proxy_enabled", enabled);
+        if (currentProxy != null && currentProxy.isMtproto()) {
+            editor.putBoolean("proxy_enabled_calls", false);
+        }
+        writeCurrentProxyToPreferences(editor, currentProxy);
+        editor.apply();
+
+        if (enabled && currentProxy != null) {
+            ProxyInfo resolvedProxy = createResolvedProxyForPreferences(currentProxy);
+            ConnectionsManager.setProxySettings(true, resolvedProxy.address, resolvedProxy.port, resolvedProxy.username, resolvedProxy.password, resolvedProxy.secret);
+            if (currentProxy.isVless()) {
+                VlessProxyManager.getInstance().stopAllExcept(currentProxy);
+            } else {
+                VlessProxyManager.getInstance().stopAll();
+            }
+        } else {
+            VlessProxyManager.getInstance().stopAll();
+            ConnectionsManager.setProxySettings(false, "", 0, "", "", "");
+        }
+    }
+
+    public static long checkProxy(int currentAccount, ProxyInfo proxyInfo, RequestTimeDelegate requestTimeDelegate) {
+        if (proxyInfo == null) {
+            return 0;
+        }
+        if (proxyInfo.isVless()) {
+            VlessProxyManager.ResolvedProxy resolvedProxy = VlessProxyManager.getInstance().resolve(proxyInfo);
+            if (resolvedProxy == null) {
+                AndroidUtilities.runOnUIThread(() -> requestTimeDelegate.run(-1));
+                return 0;
+            }
+            return ConnectionsManager.getInstance(currentAccount).checkProxy(resolvedProxy.address, resolvedProxy.port, resolvedProxy.username, resolvedProxy.password, resolvedProxy.secret, requestTimeDelegate);
+        }
+        return ConnectionsManager.getInstance(currentAccount).checkProxy(proxyInfo.address, proxyInfo.port, proxyInfo.username, proxyInfo.password, proxyInfo.secret, requestTimeDelegate);
+    }
+
+    public static String exportProxyAsJson(ProxyInfo proxyInfo) throws JSONException {
+        if (proxyInfo == null || !proxyInfo.isVless()) {
+            return "";
+        }
+        return proxyInfo.getVlessConfig().toExportJsonString();
+    }
+
+    public static ProxyInfo importVlessFromJson(String json) throws JSONException {
+        return ProxyInfo.fromVlessConfig(VlessProxyConfig.fromJson(json));
+    }
+
+    public static ProxyInfo importVlessFromText(String raw) throws JSONException {
+        String text = raw != null ? raw.trim() : "";
+        if (TextUtils.isEmpty(text)) {
+            throw new JSONException("Empty VLESS payload");
+        }
+        try {
+            return ProxyInfo.fromVlessConfig(VlessProxyConfig.fromJson(text));
+        } catch (Throwable jsonError) {
+            try {
+                return ProxyInfo.fromVlessConfig(VlessProxyConfig.fromUri(text));
+            } catch (Throwable uriError) {
+                JSONException error = new JSONException("Invalid VLESS payload");
+                error.initCause(uriError);
+                throw error;
+            }
+        }
     }
 
     public static boolean isProxyEnabled() {
@@ -1555,15 +1913,12 @@ public class SharedConfig {
             SharedPreferences preferences = MessagesController.getGlobalMainSettings();
             boolean enabled = preferences.getBoolean("proxy_enabled", false);
             SharedPreferences.Editor editor = preferences.edit();
-            editor.putString("proxy_ip", "");
-            editor.putString("proxy_pass", "");
-            editor.putString("proxy_user", "");
-            editor.putString("proxy_secret", "");
-            editor.putInt("proxy_port", 1080);
+            writeCurrentProxyToPreferences(editor, null);
             editor.putBoolean("proxy_enabled", false);
             editor.putBoolean("proxy_enabled_calls", false);
             editor.apply();
             if (enabled) {
+                VlessProxyManager.getInstance().stopAll();
                 ConnectionsManager.setProxySettings(false, "", 0, "", "", "");
             }
         }

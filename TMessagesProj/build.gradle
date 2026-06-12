@@ -122,6 +122,21 @@ android {
         }
     }
 
+    flavorDimensions "vlessPreset"
+
+    productFlavors {
+        withConfigs {
+            dimension "vlessPreset"
+            buildConfigField "boolean", "INCLUDE_BUILTIN_VLESS_PROFILES", "true"
+            buildConfigField "boolean", "LOCK_BUILTIN_VLESS_PROFILES", "true"
+        }
+        emptyConfigs {
+            dimension "vlessPreset"
+            buildConfigField "boolean", "INCLUDE_BUILTIN_VLESS_PROFILES", "false"
+            buildConfigField "boolean", "LOCK_BUILTIN_VLESS_PROFILES", "false"
+        }
+    }
+
     buildTypes {
         debug {
             jniDebuggable true
