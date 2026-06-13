@@ -678,8 +678,24 @@ public class ApplicationLoader extends Application {
 
     }
 
+    public static boolean shouldKeepProxyConnectionAlive() {
+        if (!SharedConfig.isProxyEnabled() || SharedConfig.currentProxy == null || !SharedConfig.currentProxy.isVless()) {
+            return false;
+        }
+
+        SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
+        boolean pushServiceEnabled;
+        if (preferences.contains("pushService")) {
+            pushServiceEnabled = preferences.getBoolean("pushService", true);
+        } else {
+            pushServiceEnabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", false);
+        }
+        boolean backgroundConnectionEnabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", false);
+        return pushServiceEnabled || backgroundConnectionEnabled;
+    }
+
     public boolean onPause() {
-        return false;
+        return shouldKeepProxyConnectionAlive();
     }
 
     public BaseFragment openSettings(int n) {

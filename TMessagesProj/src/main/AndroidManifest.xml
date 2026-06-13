@@ -485,6 +485,12 @@
             android:foregroundServiceType="dataSync"
         />
         <service
+            android:name="org.telegram.proxy.vless.VlessForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+        />
+        <service
             android:name=".NotificationRepeat"
             android:exported="false"
             android:foregroundServiceType="dataSync"

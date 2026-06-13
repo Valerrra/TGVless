@@ -3,6 +3,7 @@ package org.telegram.proxy.vless;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.SharedConfig;
 
@@ -54,6 +55,7 @@ public class VlessProxyManager {
                     tunnel = new VlessTunnel(config.withLocalPort(localPort));
                     tunnel.start();
                     tunnels.put(key, tunnel);
+                    updateServiceStateLocked();
                 }
                 return new ResolvedProxy("127.0.0.1", tunnel.getLocalPort(), "", "", "");
             } catch (Throwable t) {
@@ -76,11 +78,29 @@ public class VlessProxyManager {
                     }
                 }
             }
+            updateServiceStateLocked();
         }
     }
 
     public void stopAll() {
         stopAllExcept(null);
+    }
+
+    public boolean hasActiveTunnels() {
+        synchronized (lock) {
+            return !tunnels.isEmpty();
+        }
+    }
+
+    private void updateServiceStateLocked() {
+        if (ApplicationLoader.applicationContext == null) {
+            return;
+        }
+        if (tunnels.isEmpty()) {
+            VlessForegroundService.stop(ApplicationLoader.applicationContext);
+        } else {
+            VlessForegroundService.start(ApplicationLoader.applicationContext);
+        }
     }
 
     private static int allocateLocalPort() throws Exception {
