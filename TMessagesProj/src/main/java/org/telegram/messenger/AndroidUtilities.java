@@ -153,6 +153,7 @@ import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.browser.Browser;
 import org.telegram.messenger.utils.CustomHtml;
 import org.telegram.messenger.utils.DebugRecordingCanvas;
+import org.telegram.proxy.vless.VlessProxyConfig;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -1379,7 +1380,7 @@ public class AndroidUtilities {
             Linkify.addLinks(text, Linkify.PHONE_NUMBERS);
         }
         if ((mask & Linkify.WEB_URLS) != 0) {
-            gatherLinks(links, text, LinkifyPort.WEB_URL, new String[]{"http://", "https://", "tg://", "tonsite://"}, sUrlMatchFilter, internalOnly);
+            gatherLinks(links, text, LinkifyPort.WEB_URL, new String[]{"http://", "https://", "tg://", "tonsite://", "vless://"}, sUrlMatchFilter, internalOnly);
         }
         pruneOverlaps(links);
         if (links.size() == 0) {
@@ -4592,6 +4593,7 @@ public class AndroidUtilities {
                 String port = null;
                 String address = null;
                 String secret = null;
+                SharedConfig.ProxyInfo importedVless = null;
                 String scheme = data.getScheme();
                 if (scheme != null) {
                     if ((scheme.equals("http") || scheme.equals("https"))) {
@@ -4625,7 +4627,15 @@ public class AndroidUtilities {
                             password = data.getQueryParameter("pass");
                             secret = data.getQueryParameter("secret");
                         }
+                    } else if (scheme.equals("vless")) {
+                        importedVless = SharedConfig.importVlessFromText(data.toString());
                     }
+                }
+                if (importedVless != null) {
+                    if (invoked) {
+                        showVlessAlert(activity, importedVless);
+                    }
+                    return true;
                 }
                 if (!TextUtils.isEmpty(address) && !TextUtils.isEmpty(port)) {
                     if (user == null) {
@@ -4645,6 +4655,65 @@ public class AndroidUtilities {
 
         }
         return false;
+    }
+
+    public static void showVlessAlert(Activity activity, @NonNull SharedConfig.ProxyInfo proxyInfo) {
+        final VlessProxyConfig config;
+        try {
+            config = proxyInfo.getVlessConfig();
+        } catch (Exception e) {
+            FileLog.e(e);
+            return;
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        builder.setTitle(getString(R.string.AddVlessProxy));
+
+        StringBuilder message = new StringBuilder();
+        appendProxyLine(message, getString(R.string.UseProxyAddress), config.server);
+        appendProxyLine(message, getString(R.string.UseProxyPort), String.valueOf(config.port));
+        appendProxyLine(message, "UUID", config.uuid);
+        appendProxyLine(message, getString(R.string.UseProxyTls), config.tlsEnabled ? "On" : "Off");
+        appendProxyLine(message, getString(R.string.UseProxySni), config.sni);
+        appendProxyLine(message, getString(R.string.UseProxyTransport), config.transport == VlessProxyConfig.TRANSPORT_WS ? getString(R.string.UseProxyTransportWs) : getString(R.string.UseProxyTransportTcp));
+        if (config.transport == VlessProxyConfig.TRANSPORT_WS) {
+            appendProxyLine(message, getString(R.string.UseProxyWsPath), config.wsPath);
+        }
+        if (config.insecure) {
+            appendProxyLine(message, getString(R.string.UseProxyInsecure), "On");
+        }
+        if (message.length() > 0) {
+            message.append("\n\n");
+        }
+        message.append(getString(R.string.UseProxyVlessInfo));
+
+        builder.setMessage(message.toString());
+        builder.setPositiveButton(getString(R.string.ConnectingConnectProxy), (dialog, which) -> {
+            SharedConfig.ProxyInfo savedInfo = SharedConfig.addProxy(proxyInfo);
+            SharedConfig.currentProxy = savedInfo;
+
+            SharedPreferences.Editor editor = MessagesController.getGlobalMainSettings().edit();
+            SharedConfig.writeCurrentProxyToPreferences(editor, savedInfo);
+            editor.putBoolean("proxy_enabled", true);
+            editor.putBoolean("proxy_enabled_calls", false);
+            editor.commit();
+
+            SharedConfig.applyProxySettings(true);
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.proxySettingsChanged);
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.showBulletin, Bulletin.TYPE_SUCCESS, getString(R.string.ProxyAddedSuccess));
+        });
+        builder.setNegativeButton(getString(R.string.Cancel), null);
+        builder.show();
+    }
+
+    private static void appendProxyLine(@NonNull StringBuilder builder, @NonNull String label, @Nullable String value) {
+        if (TextUtils.isEmpty(value)) {
+            return;
+        }
+        if (builder.length() > 0) {
+            builder.append('\n');
+        }
+        builder.append(label).append(": ").append(value);
     }
 
     public static float getAnimatorDurationScale() {

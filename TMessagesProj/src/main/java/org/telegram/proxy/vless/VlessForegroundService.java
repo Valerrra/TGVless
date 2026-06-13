@@ -69,14 +69,21 @@ public class VlessForegroundService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
         );
 
-        return new Notification.Builder(this, CHANNEL_ID)
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle(getApplicationInfo().loadLabel(getPackageManager()))
-                .setContentText("VLESS proxy active")
+                .setContentText("Connection active")
                 .setSmallIcon(R.drawable.notification)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
                 .setShowWhen(false)
-                .build();
+                .setOnlyAlertOnce(true)
+                .setLocalOnly(true)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .setVisibility(Notification.VISIBILITY_SECRET);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            builder.setPriority(Notification.PRIORITY_MIN);
+        }
+        return builder.build();
     }
 
     private void createChannel() {
@@ -89,11 +96,15 @@ public class VlessForegroundService extends Service {
         }
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "VLESS connection",
+                "Background connection",
                 NotificationManager.IMPORTANCE_MIN
         );
+        channel.setDescription("Keeps background connection alive");
         channel.setShowBadge(false);
         channel.setSound(null, null);
+        channel.enableVibration(false);
+        channel.enableLights(false);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
         manager.createNotificationChannel(channel);
     }
 }
